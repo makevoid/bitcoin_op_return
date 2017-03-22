@@ -7,7 +7,7 @@ class String
   end
 end
 
-module BitcoinOpReturn  
+module BitcoinOpReturn
   class << self
     attr_accessor :bitcoind_cmd, :transaction_fee
 
@@ -69,7 +69,7 @@ module BitcoinOpReturn
       unpacked_txn = unpack_raw_txn(raw_txn)
 
       # append opreturn (6a represents op_return)
-      
+
       op_return_script = "6a" + "#{metadata.length.chr}#{metadata}".unpack("H*")[0]
 
       unpacked_txn["vout"].push({
@@ -79,7 +79,7 @@ module BitcoinOpReturn
 
       # $raw_txn=coinspark_pack_raw_txn($txn_unpacked);
       raw_txn = pack_raw_txn(unpacked_txn)
-        
+
       sign_txn_response = bitcoind("signrawtransaction", testnet, raw_txn)
       # txid = bitcoind("sendrawtransaction", testnet, signed_txn)
 
@@ -102,11 +102,19 @@ module BitcoinOpReturn
 
         args.each do |x|
           begin
-            command += " #{Shellwords.escape(JSON.generate(x))}"
-          rescue
+            command += if x.is_a? String
+              " #{Shellwords.escape x}"
+            else
+              " #{Shellwords.escape(JSON.generate(x))}"
+            end
+          rescue # TODO: rescue json errors only
             command += " #{Shellwords.escape(x)}"
           end
         end
+
+        # if DEBUG
+        # puts "\n#{command}\n"
+        # raise command.inspect
 
         raw_result = `#{command}`.strip.chomp
 
@@ -165,7 +173,7 @@ module BitcoinOpReturn
         # pack varint number of input
         binary += pack_var_int(txn["vin"].length)
 
-        # pack the inputs        
+        # pack the inputs
         txn["vin"].each do |input|
           binary += [ input["txid"] ].pack("H*").reverse
           binary += [ input["vout"] ].pack("V")
@@ -198,12 +206,12 @@ module BitcoinOpReturn
 
       def unpack_raw_txn hex
         #   // see: https://en.bitcoin.it/wiki/Transactions
-        
+
         # convert the hex representation into a real string]
         binary = [ hex ].pack("H*")
-        
+
         txn = {}
-        
+
         # get the version and initialize array
 
         txn["version"] = binary.shift!(4).unpack("V")[0]
@@ -212,7 +220,7 @@ module BitcoinOpReturn
 
         # parse the number of inputs
         n = parse_var_int(binary)
-        
+
         # parse the inputs
         n.times do
           input = {}
@@ -229,11 +237,11 @@ module BitcoinOpReturn
         n = parse_var_int(binary)
 
         # parse the outputs
-        n.times do 
+        n.times do
           output = {}
-          output["value"] = binary.shift!(8).unpack("V")[0] / 100000000.0 
+          output["value"] = binary.shift!(8).unpack("V")[0] / 100000000.0
           # remember it is stored in satoshi inernally
-          
+
           script_length = parse_var_int(binary)
           output["scriptPubKey"] = binary.shift!(script_length).unpack("H*")[0]
           txn["vout"] << output
